@@ -121,7 +121,7 @@ def classify_hybrid_vsearch_sklearn(ctx,
 
     if search_exact = False:                                                               ## added new code block
     taxa1, = ccv(query=query, reference_reads=reference_reads,
-                 perc_identity=perc_identity, perc_query_aligned=query_cov,
+                 perc_identity=perc_identity, perc_query_aligned=query_cov,                ## added query_cov and perc_identity terms
                  reference_taxonomy=reference_taxonomy, maxaccepts=maxaccepts,
                  strand=strand, min_consensus=min_consensus,
                  search_exact=False, threads=threads, maxhits=maxhits,
