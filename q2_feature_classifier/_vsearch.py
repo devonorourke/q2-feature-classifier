@@ -25,8 +25,10 @@ def classify_consensus_vsearch(query: DNAFASTAFormat,
                                reference_reads: DNAFASTAFormat,
                                reference_taxonomy: pd.Series,
                                maxaccepts: int = 10,
-                               perc_identity: float = 0.8,
-                               query_cov: float = 0.8,
+                               prefilter_perc_identity: float = 0.8,      ## changed from 'perc_identity'
+                               perc_identity: float = 0.8,                ## added anew
+                               prefilter_query_cov: float = 0.8,          ## changed from 'query_cov'
+                               query_cov: float = 0.8,                    ## added anew
                                strand: str = 'both',
                                min_consensus: float = 0.51,
                                unassignable_label: str =
@@ -44,8 +46,8 @@ def classify_consensus_vsearch(query: DNAFASTAFormat,
         maxaccepts = 0
     if maxrejects == 'all':
         maxrejects = 0
-    cmd = ['vsearch', '--usearch_global', seqs_fp, '--id', str(perc_identity),
-           '--query_cov', str(query_cov), '--strand', strand, '--maxaccepts',
+    cmd = ['vsearch', '--usearch_global', seqs_fp, '--id', str(prefilter_perc_identity),    ## changed from 'perc_identity'
+           '--query_cov', str(prefilter_query_cov), '--strand', strand, '--maxaccepts',     ## changed from 'query_cov'
            str(maxaccepts), '--maxrejects', str(maxrejects), '--db', ref_fp,
            '--threads', str(threads)]
     if search_exact:
@@ -54,7 +56,7 @@ def classify_consensus_vsearch(query: DNAFASTAFormat,
         cmd.append('--top_hits_only')
     if output_no_hits:
         cmd.append('--output_no_hits')
-    if weak_id > 0 and weak_id < perc_identity:
+    if weak_id > 0 and weak_id < prefilter_perc_identity:                               ## changed from 'perc_identity'
         cmd.extend(['--weak_id', str(weak_id)])
     if maxhits != 'all':
         cmd.extend(['--maxhits', str(maxhits)])
@@ -71,7 +73,9 @@ def classify_hybrid_vsearch_sklearn(ctx,
                                     reference_taxonomy,
                                     classifier,
                                     maxaccepts=10,
-                                    perc_identity=0.5,
+                                    prefilter_perc_identity=0.5,          ## changed from 'perc_identity'
+                                    perc_identity=0.8,                    ## modified existing value
+                                    prefilter_query_cov=0.8,              ## changed from 'query_cov'
                                     query_cov=0.8,
                                     strand='both',
                                     min_consensus=0.51,
@@ -104,14 +108,23 @@ def classify_hybrid_vsearch_sklearn(ctx,
             # perform rough positive filter on query sequences
             query, misses, = exclude(
                 query_sequences=query, reference_sequences=sparse_reference,
-                method='vsearch', perc_identity=perc_identity,
-                perc_query_aligned=query_cov, threads=threads)
+                method='vsearch', perc_identity=prefilter_perc_identity,
+                perc_query_aligned=prefilter_query_cov, threads=threads)
 
     # find exact matches, perform LCA consensus classification
+    if search_exact = True:
     taxa1, = ccv(query=query, reference_reads=reference_reads,
                  reference_taxonomy=reference_taxonomy, maxaccepts=maxaccepts,
                  strand=strand, min_consensus=min_consensus,
                  search_exact=True, threads=threads, maxhits=maxhits,
+                 maxrejects=maxrejects, output_no_hits=True)
+
+    if search_exact = False:                                                               ## added new code block
+    taxa1, = ccv(query=query, reference_reads=reference_reads,
+                 perc_identity=perc_identity, perc_query_aligned=query_cov,
+                 reference_taxonomy=reference_taxonomy, maxaccepts=maxaccepts,
+                 strand=strand, min_consensus=min_consensus,
+                 search_exact=False, threads=threads, maxhits=maxhits,
                  maxrejects=maxrejects, output_no_hits=True)
 
     # Annotate taxonomic assignments with classification method
@@ -144,8 +157,10 @@ output_descriptions = {
     'classification': 'The resulting taxonomy classifications.'}
 
 parameters = {'maxaccepts': Int % Range(1, None) | Str % Choices(['all']),
-              'perc_identity': Float % Range(0.0, 1.0, inclusive_end=True),
-              'query_cov': Float % Range(0.0, 1.0, inclusive_end=True),
+              'prefilt_perc_identity': Float % Range(0.0, 1.0, inclusive_end=True),      ## changed from 'perc_identity'
+              'perc_identity': Float % Range(0.0, 1.0, inclusive_end=True),              ## added anew
+              'prefilt_query_cov': Float % Range(0.0, 1.0, inclusive_end=True),          ## changed from 'query_cov'
+              'query_cov': Float % Range(0.0, 1.0, inclusive_end=True),                  ## added anew
               'strand': Str % Choices(['both', 'plus']),
               'min_consensus': Float % Range(0.5, 1.0, inclusive_end=True,
                                              inclusive_start=False),
@@ -181,22 +196,28 @@ parameter_descriptions = {
                   'accepted. If maxaccepts and maxrejects are both set to '
                   '"all", the complete database is searched.',
     'perc_identity': 'Reject match if percent identity to query is '
-                     'lower.',
+                     'lower. for MAIN alignment step',
+    'prefilter_perc_identity': 'Reject match if percent identity to query is '
+                     'lower. for PREFILTER alignment only',
     'query_cov': 'Reject match if query alignment coverage per high-'
-                 'scoring pair is lower.',
+                 'scoring pair is lower. for MAIN alignment step',
+    'prefilter_query_cov': 'Reject match if query alignment coverage per high-'
+                 'scoring pair is lower. for PREFILTER alignment only',
     'min_consensus': 'Minimum fraction of assignments must match top '
-                     'hit to be accepted as consensus assignment.',
+                     'hit to be accepted as consensus assignment.'
+                     'applied similarly to PREFILTER and MAIN alignment steps',
     'threads': 'Number of threads to use for job parallelization.',
-    'maxhits': 'Maximum number of hits to show once the search is terminated.',
+    'maxhits': 'Maximum number of hits to show once the search is terminated. '
+               'applied similarly to PREFILTER and MAIN alignment steps',
     'maxrejects': 'Maximum number of non-matching target sequences to '
                   'consider before stopping the search. This option works in '
                   'pair with maxaccepts (see maxaccepts description for '
-                  'details).'}
+                  'details).'
+                  'applied similarly to PREFILTER and MAIN alignment steps'}
 
 outputs = [('classification', FeatureData[Taxonomy])]
 
 ignore_prefilter = ' This parameter is ignored if `prefilter` is disabled.'
-
 
 plugin.methods.register_function(
     function=classify_consensus_vsearch,
@@ -271,14 +292,18 @@ plugin.pipelines.register_function(
     parameter_descriptions={
         **{k: parameter_descriptions[k] for k in [
             'strand', 'maxaccepts', 'min_consensus', 'threads']},
-        'perc_identity': 'Percent sequence similarity to use for PREFILTER. ' +
-                         parameter_descriptions['perc_identity'] + ' Set to a '
+        'prefilter_perc_identity': 'Percent sequence similarity to use for PREFILTER. ' +
+                         parameter_descriptions['prefilter_perc_identity'] + ' Set to a '
                          'lower value to perform a rough pre-filter.' +
                          ignore_prefilter,
-        'query_cov': 'Query coverage threshold to use for PREFILTER. ' +
-                     parameter_descriptions['query_cov'] + ' Set to a '
+        'perc_identity': 'Percent sequence similarity to use for MAIN alignment. ' +
+                         parameter_descriptions['perc_identity'] + ignore_prefilter,
+        'prefilter_query_cov': 'Query coverage threshold to use for PREFILTER. ' +
+                     parameter_descriptions['prefilter_query_cov'] + ' Set to a '
                      'lower value to perform a rough pre-filter.' +
                      ignore_prefilter,
+        'query_cov': 'Query coverage threshold to use for MAIN alignment. ' +
+                     parameter_descriptions['main_query_cov'] + ignore_prefilter,
         'confidence': _parameter_descriptions['confidence'],
         'read_orientation': 'Direction of reads with respect to reference '
                             'sequences in pre-trained sklearn classifier. '
@@ -308,12 +333,13 @@ plugin.pipelines.register_function(
                  'Assign taxonomy to query sequences using hybrid classifier. '
                  'First performs rough positive filter to remove artifact and '
                  'low-coverage sequences (use "prefilter" parameter to toggle '
-                 'this step on or off). Second, performs VSEARCH exact match '
-                 'between query and reference_reads to find exact matches, '
+                 'this step on or off). Second, performs VSEARCH alignment using '
+                 ' either an exact match (fast!) or user-defined by percent identity'
+                 'and query coverage (not as fast!) between query and reference_reads'
                  'followed by least common ancestor consensus taxonomy '
                  'assignment from among maxaccepts top hits, min_consensus of '
                  'which share that taxonomic assignment. Query sequences '
-                 'without an exact match are then classified with a pre-'
+                 'without a VSEARCH match are then classified with a pre-'
                  'trained sklearn taxonomy classifier to predict the most '
                  'likely taxonomic lineage.'),
 )
